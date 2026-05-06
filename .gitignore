@@ -3,13 +3,33 @@
 .packages
 .pub/
 build/
+.flutter-plugins
+.flutter-plugins-dependencies
+
+# Optional Flutter version manager
+.fvm/
 
 # IDE
 .idea/
 .vscode/*.code-workspace
+*.iml
+
+# Local env files
+.env
+.env.*
 
 # Firebase
 firebase-debug.log
+
+# Firebase config (keep local, don't publish)
+android/app/google-services.json
+**/GoogleService-Info.plist
+
+# Common private key / cert files
+**/*.pem
+**/*.p12
+**/*.pfx
+**/*.key
 
 # Generated
 lib/firebase_options.dart

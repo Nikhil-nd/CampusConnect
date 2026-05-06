@@ -55,11 +55,7 @@ class EventsScreen extends StatelessWidget {
                     return Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: <Widget>[
-                        const EmptyState(
-                          title: 'No events yet',
-                          subtitle:
-                              'Events are stored in Firestore (not temporary).\n\nOnly approved events show for everyone. Your pending events show only when you sign in with the same account, and past events are hidden.',
-                        ),
+                        const EmptyState(title: 'No events yet. Your submissions will appear as Pending.'),
                         const SizedBox(height: 16),
                         FilledButton.icon(
                           onPressed: () => _showCreateEventSheet(context),
