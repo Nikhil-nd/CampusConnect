@@ -1,0 +1,15 @@
+# Flutter/Dart
+.dart_tool/
+.packages
+.pub/
+build/
+
+# IDE
+.idea/
+.vscode/*.code-workspace
+
+# Firebase
+firebase-debug.log
+
+# Generated
+lib/firebase_options.dart
