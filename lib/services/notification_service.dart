@@ -4,6 +4,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:timezone/data/latest_all.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
+import 'dart:developer' as dev;
 
 class NotificationService {
   final FirebaseMessaging _messaging = FirebaseMessaging.instance;
@@ -16,7 +17,10 @@ class NotificationService {
     }
 
     tz.initializeTimeZones();
-    final String timeZoneName = (await FlutterTimezone.getLocalTimezone()).identifier;
+    // flutter_timezone v5 returns TimezoneInfo; use .identifier for the IANA name.
+    final TimezoneInfo tzInfo = await FlutterTimezone.getLocalTimezone();
+    final String timeZoneName = tzInfo.identifier;
+    dev.log('NotificationService: local timezone = $timeZoneName');
     tz.setLocalLocation(tz.getLocation(timeZoneName));
     _timezoneReady = true;
   }
@@ -77,8 +81,13 @@ class NotificationService {
       return;
     }
 
+    dev.log('NotificationService: scheduleEventReminder called for id=$id at $scheduledDate');
+
     await _configureLocalTimezone();
     final tz.TZDateTime reminderTime = tz.TZDateTime.from(scheduledDate, tz.local);
+    final tz.TZDateTime now = tz.TZDateTime.now(tz.local);
+
+    dev.log('NotificationService: reminderTime=$reminderTime  now=$now');
 
     const AndroidNotificationDetails android = AndroidNotificationDetails(
       'event_reminder_channel',
@@ -88,19 +97,40 @@ class NotificationService {
     );
     const NotificationDetails details = NotificationDetails(android: android);
 
-    if (reminderTime.isBefore(tz.TZDateTime.now(tz.local))) {
+    if (reminderTime.isBefore(now)) {
+      // Reminder window already passed — fire immediately.
+      dev.log('NotificationService: reminder time in the past, showing immediately');
       await _localNotifications.show(id, title, body, details);
       return;
     }
 
-    await _localNotifications.zonedSchedule(
-      id,
-      title,
-      body,
-      reminderTime,
-      details,
-      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-      uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
-    );
+    // Try exact scheduling; fall back to inexact if exact alarms are not permitted.
+    try {
+      await _localNotifications.zonedSchedule(
+        id,
+        title,
+        body,
+        reminderTime,
+        details,
+        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+        uiLocalNotificationDateInterpretation:
+            UILocalNotificationDateInterpretation.absoluteTime,
+      );
+      dev.log('NotificationService: exact alarm scheduled successfully');
+    } catch (e) {
+      dev.log('NotificationService: exact alarm failed ($e), falling back to inexact');
+      // Fallback: inexact alarm (no special permission required).
+      await _localNotifications.zonedSchedule(
+        id,
+        title,
+        body,
+        reminderTime,
+        details,
+        androidScheduleMode: AndroidScheduleMode.inexact,
+        uiLocalNotificationDateInterpretation:
+            UILocalNotificationDateInterpretation.absoluteTime,
+      );
+      dev.log('NotificationService: inexact alarm scheduled as fallback');
+    }
   }
 }

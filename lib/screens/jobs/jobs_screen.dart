@@ -5,6 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../core/utils/auth_error_message.dart';
 import '../../models/job_model.dart';
 import '../../providers/feed_provider.dart';
+import '../../routes/app_router.dart';
 import '../../services/firestore_service.dart';
 import '../../widgets/app_search_field.dart';
 import '../../widgets/empty_state.dart';
@@ -117,6 +118,7 @@ class JobsScreen extends StatelessWidget {
                     separatorBuilder: (_, __) => const SizedBox(height: 10),
                     itemBuilder: (BuildContext context, int index) {
                       final JobModel job = jobs[index];
+                      final bool isOwnJob = job.postedBy == firestore.currentUserId;
                       return Card(
                         child: ListTile(
                           title: Text(job.title),
@@ -135,6 +137,7 @@ class JobsScreen extends StatelessWidget {
                               ),
                               IconButton(
                                 icon: const Icon(Icons.flag_outlined),
+                                tooltip: 'Report spam',
                                 onPressed: () async {
                                   await firestore.reportSpam(
                                     entityType: 'jobs',
@@ -144,6 +147,12 @@ class JobsScreen extends StatelessWidget {
                                   );
                                 },
                               ),
+                              if (!isOwnJob)
+                                IconButton(
+                                  icon: const Icon(Icons.chat_outlined),
+                                  tooltip: 'Chat with poster',
+                                  onPressed: () => _chatWithPoster(context, firestore, job),
+                                ),
                             ],
                           ),
                         ),
@@ -157,6 +166,31 @@ class JobsScreen extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  /// Opens (or creates) a DM thread with the job poster.
+  static Future<void> _chatWithPoster(
+    BuildContext context,
+    FirestoreService firestore,
+    JobModel job,
+  ) async {
+    if (job.postedBy.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Poster info is not available for this job.')),
+      );
+      return;
+    }
+
+    try {
+      final String chatId = await firestore.createOrGetChat(job.postedBy);
+      if (!context.mounted) return;
+      Navigator.pushNamed(context, AppRouter.chat, arguments: chatId);
+    } catch (error) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(firebaseErrorMessage(error))),
+      );
+    }
   }
 
   Future<void> _showCreateJobSheet(BuildContext context) async {

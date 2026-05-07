@@ -28,12 +28,17 @@ class MarketplaceModel {
   });
 
   factory MarketplaceModel.fromMap(Map<String, dynamic> map, String id) {
+    final String resolvedSellerId = (map['sellerId'] as String?) ??
+        (map['createdBy'] as String?) ??
+        (map['userId'] as String?) ??
+        (map['uid'] as String?) ??
+        '';
     return MarketplaceModel(
       id: id,
       title: map['title'] as String? ?? '',
       price: (map['price'] as num?)?.toDouble() ?? 0,
       image: map['image'] as String? ?? '',
-      sellerId: map['sellerId'] as String? ?? '',
+      sellerId: resolvedSellerId,
       category: map['category'] as String? ?? 'Other',
       description: map['description'] as String? ?? '',
       location: map['location'] as String? ?? '',

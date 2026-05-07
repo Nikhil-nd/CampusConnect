@@ -23,6 +23,8 @@ class MarketplaceScreen extends StatelessWidget {
     await showModalBottomSheet<void>(
       context: context,
       builder: (BuildContext sheetContext) {
+        final bool isOwnListing =
+            item.sellerId.isNotEmpty && item.sellerId == firestore.currentUserId;
         return Padding(
           padding: const EdgeInsets.all(16),
           child: Column(
@@ -49,17 +51,44 @@ class MarketplaceScreen extends StatelessWidget {
               ),
               const SizedBox(height: 8),
               FilledButton.icon(
-                onPressed: item.sellerId.isEmpty
+                // Disable only when the viewer IS the seller with a known ID.
+                // An empty sellerId is handled inside the callback, not silently.
+                onPressed: isOwnListing
                     ? null
                     : () async {
-                        final String chatId = await firestore.createOrGetChat(item.sellerId);
-                        if (context.mounted) {
-                          Navigator.pop(sheetContext);
-                          Navigator.pushNamed(context, AppRouter.chat, arguments: chatId);
+                        if (item.sellerId.trim().isEmpty) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Seller info is missing for this listing.'),
+                            ),
+                          );
+                          return;
+                        }
+
+                        // Capture the navigator BEFORE the async gap so it
+                        // stays valid after the bottom sheet is dismissed.
+                        final NavigatorState nav = Navigator.of(context);
+
+                        try {
+                          final String chatId =
+                              await firestore.createOrGetChat(item.sellerId);
+
+                          // Dismiss the sheet, then navigate.
+                          if (sheetContext.mounted) Navigator.pop(sheetContext);
+                          nav.pushNamed(AppRouter.chat, arguments: chatId);
+                        } catch (error) {
+                          if (sheetContext.mounted) Navigator.pop(sheetContext);
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text(firebaseErrorMessage(error))),
+                            );
+                          }
                         }
                       },
                 icon: const Icon(Icons.chat_outlined),
-                label: const Text('Start Chat'),
+                label: isOwnListing
+                    ? const Text('Your Listing')
+                    : const Text('Start Chat'),
               ),
             ],
           ),

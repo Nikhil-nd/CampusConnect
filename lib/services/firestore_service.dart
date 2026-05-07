@@ -250,31 +250,61 @@ class FirestoreService {
   }
 
   Future<String> createOrGetChat(String otherUserId) async {
-    final List<String> participants = <String>[_uid, otherUserId]..sort();
-    final QuerySnapshot<Map<String, dynamic>> existing = await _db
-        .collection('chats')
-        .where('participants', isEqualTo: participants)
-        .limit(1)
-        .get();
-
-    if (existing.docs.isNotEmpty) {
-      return existing.docs.first.id;
+    final String me = _uid;
+    final String other = otherUserId.trim();
+    if (me.isEmpty) {
+      throw Exception('Not authenticated.');
+    }
+    if (other.isEmpty) {
+      throw Exception('Other user is required.');
+    }
+    if (other == me) {
+      throw Exception('Cannot start a chat with yourself.');
     }
 
-    final DocumentReference<Map<String, dynamic>> ref = await _db.collection('chats').add(<String, dynamic>{
-      'participants': participants,
-      'lastMessage': '',
-      'updatedAt': FieldValue.serverTimestamp(),
-    });
-    return ref.id;
+    // Deterministic chat id avoids fragile array-equality queries and reduces duplicates.
+    final List<String> participants = <String>[me, other]..sort();
+    final String chatId = participants.join('_');
+    final DocumentReference<Map<String, dynamic>> chatRef = _db.collection('chats').doc(chatId);
+
+    final DocumentSnapshot<Map<String, dynamic>> existing = await chatRef.get();
+    if (existing.exists) {
+      return chatId;
+    }
+
+    await chatRef.set(
+      <String, dynamic>{
+        'participants': participants,
+        'lastMessage': '',
+        'updatedAt': FieldValue.serverTimestamp(),
+      },
+      SetOptions(merge: true),
+    );
+
+    return chatId;
   }
 
   Stream<QuerySnapshot<Map<String, dynamic>>> watchUserChats() {
     return _db
         .collection('chats')
         .where('participants', arrayContains: _uid)
-        .orderBy('updatedAt', descending: true)
         .snapshots();
+  }
+
+  /// Fetches the display name of any user by UID from the users collection.
+  /// Returns the UID itself as fallback if the document doesn't exist or has
+  /// no name, so the UI always has something sensible to display.
+  Future<String> getUserName(String uid) async {
+    if (uid.trim().isEmpty) return 'Unknown';
+    try {
+      final DocumentSnapshot<Map<String, dynamic>> doc =
+          await _db.collection('users').doc(uid).get();
+      if (!doc.exists || doc.data() == null) return uid;
+      final String name = doc.data()!['name'] as String? ?? '';
+      return name.trim().isEmpty ? uid : name.trim();
+    } catch (_) {
+      return uid;
+    }
   }
 
   Stream<QuerySnapshot<Map<String, dynamic>>> watchMessages(String chatId) {
@@ -301,10 +331,14 @@ class FirestoreService {
       'timestamp': FieldValue.serverTimestamp(),
     });
 
-    batch.update(chatRef, <String, dynamic>{
-      'lastMessage': text,
-      'updatedAt': FieldValue.serverTimestamp(),
-    });
+    batch.set(
+      chatRef,
+      <String, dynamic>{
+        'lastMessage': text,
+        'updatedAt': FieldValue.serverTimestamp(),
+      },
+      SetOptions(merge: true),
+    );
 
     await batch.commit();
   }
